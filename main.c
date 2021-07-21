@@ -1,9 +1,11 @@
 #include <stdio.h>
 #include <sqlite3.h>
 #include <unistd.h>
+#include <stdlib.h>
 #include <string.h>
 #include <pwd.h>
 #define MAX_STR_LEN 30
+
 int main(int argc, char* argv[]){
     char* ops = "vi";
     char op = getopt(argc, argv, ops);
@@ -20,27 +22,54 @@ int main(int argc, char* argv[]){
         return 1;
     }
 
+    sqlite3* pass_data;
+    sqlite3_stmt* pass_stmt;
+    const char* pass_tail;
+    char* pass_err;
+
+    if(sqlite3_open("database.db", &pass_data)){
+        fprintf(stderr, "Could not open the .db file\n");
+        return 1;
+    }
+
+    if(sqlite3_exec(pass_data, "CREATE TABLE IF NOT EXISTS password(pass TEXT NOT NULL);", NULL, NULL, &pass_err)){
+        fprintf(stderr, "ERROR: %s\n", pass_err);
+        return 1;
+    }
+
     uid_t uid = getuid();
     struct passwd *id = getpwuid(uid);
-    char usrpass[MAX_STR_LEN] = "1";
+    char usrpass[MAX_STR_LEN];
+
+    char* first_query = sqlite3_mprintf("SELECT pass FROM password LIMIT 1;");
+    if(sqlite3_prepare_v2(pass_data, first_query, 128,  &pass_stmt, &pass_tail) != SQLITE_OK){
+        fprintf(stderr, "ERROR: %s\n", pass_err);
+        return 1;
+    }
+
+    while((sqlite3_step(pass_stmt)) == SQLITE_ROW)
+        strcpy(usrpass, sqlite3_column_text (pass_stmt, 0));
     char* enteredpass;
+
     do{
         fprintf(stdout, "Hello, %s. Enter password to access: ", id->pw_name);
         enteredpass = getpass("");
     }while(strcmp(enteredpass, usrpass) != 0);
-
-    sqlite3* db;
-    sqlite3_stmt* stmt;
-    sqlite3_open("database.db", &db);
-    char* err;
-    int rc = sqlite3_exec(db, "CREATE TABLE IF NOT EXISTS passwords(username TEXT NOT NULL, password TEXT NOT NULL, email TEXT NOT NULL, website TEXT NOT NULL);", NULL, NULL, &err);
+   
+    if(sqlite3_exec(pass_data, "CREATE TABLE IF NOT EXISTS passwords(username TEXT NOT NULL, password TEXT NOT NULL, email TEXT NOT NULL, website TEXT NOT NULL);", NULL, NULL, &pass_err)){
+        fprintf(stderr, "ERROR: %s\n", pass_err);
+        return 1;
+    }
     
     int choice;
     while(1){
         do{
-            fprintf(stdout, "================MENU================\n1) Create new password\n2) Find all sites and apps connected to an email\n3) Find a password for a site or app\n4)Exit\n====================================\n");
+            fprintf(stdout, "================MENU================\n1) Create new password\n2) Find all sites and apps connected to an email\n3) Find a password for a site or app\n4) Change program password\n5)Exit\n====================================\n");
             fscanf(stdin, "%i", &choice);
-        }while(choice < 1 || choice > 4);
+            if(choice < 1 || choice > 5){
+                fprintf(stdout, "Invalid selection\n");
+            }
+        }while(choice < 1 || choice > 5);
         
         if(choice == 1){
             char username[MAX_STR_LEN];
@@ -61,16 +90,81 @@ int main(int argc, char* argv[]){
             fscanf(stdin, "%30s", website);
             
             char* query = sqlite3_mprintf("INSERT INTO passwords(username, password, email, website) VALUES('%s', '%s', '%s', '%s');", username, password, email, website);
-            printf("%s\n", query);
-            sqlite3_exec(db, query, NULL, NULL, &err);
-            if(err != SQLITE_OK){
-                printf("ERROR: %s\n", err);
+            
+            if(sqlite3_exec(pass_data, query, NULL, NULL, &pass_err)){
+                fprintf(stderr, "ERROR: %s\n", pass_err);
                 return 1;
             }
         }
+        
+        if(choice == 2){
+            char email[MAX_STR_LEN];
+            fprintf(stdout, "Provide email\n");
+            fscanf(stdin, "%30s", email);
+
+            char* query = sqlite3_mprintf("SELECT username, password, email, website FROM passwords WHERE email = '%s' ORDER BY username ASC;", email);
+
+            if(sqlite3_prepare_v2(pass_data, query, 128,  &pass_stmt, &pass_tail) != SQLITE_OK){
+                fprintf(stderr, "ERROR: %s\n", pass_err);
+                return 1;
+            }
+
+            while((sqlite3_step(pass_stmt)) == SQLITE_ROW){
+                fprintf(stdout, "\nUsername: %s", sqlite3_column_text (pass_stmt, 0));
+                fprintf(stdout, "\nPassword: %s", sqlite3_column_text (pass_stmt, 1));
+                fprintf(stdout, "\nEmail: %s", sqlite3_column_text (pass_stmt, 2));
+                fprintf(stdout, "\nWebsite: %s", sqlite3_column_text (pass_stmt, 3));
+                fprintf(stdout, "\n"); 
+            }   
+            fprintf(stdout, "\n");
+        }
+
+        if(choice == 3){
+            char website[MAX_STR_LEN];
+            fprintf(stdout, "Provide website\n");
+            fscanf(stdin, "%30s", website);
+
+            char* query = sqlite3_mprintf("SELECT username, password, email, website FROM passwords WHERE website = '%s' ORDER BY username ASC;", website);
+
+            if(sqlite3_prepare_v2(pass_data, query, 128,  &pass_stmt, &pass_tail) != SQLITE_OK){
+                fprintf(stderr, "ERROR: %s\n", pass_err);
+                return 1;
+            }
+
+            while((sqlite3_step(pass_stmt)) == SQLITE_ROW){
+                fprintf(stdout, "\nUsername: %s", sqlite3_column_text(pass_stmt, 0));
+                fprintf(stdout, "\nPassword: %s", sqlite3_column_text(pass_stmt, 1));
+                fprintf(stdout, "\nEmail: %s", sqlite3_column_text(pass_stmt, 2));
+                fprintf(stdout, "\nWebsite: %s", sqlite3_column_text(pass_stmt, 3));
+                fprintf(stdout, "\n"); 
+            }   
+            fprintf(stdout, "\n");
+        }
         if(choice == 4){
+            char newpass[MAX_STR_LEN];
+            fprintf(stdout, "Provide new password\n");
+            fscanf(stdin, "%30s", newpass);
+
+            if(sqlite3_exec(pass_data, "DELETE FROM password;", NULL, NULL, &pass_err)){
+                fprintf(stderr, "ERROR: %s\n", pass_err);
+                return 1;
+            }
+
+            char* query = sqlite3_mprintf("INSERT INTO password(pass) VALUES('%s');", newpass);
+
+            if(sqlite3_exec(pass_data, query, NULL, NULL, &pass_err)){
+                fprintf(stderr, "ERROR: %s\n", pass_err);
+                return 1;
+            }else{
+                fprintf(stdout, "Your new password is: %s\n", newpass);
+            }
+        }
+        if(choice == 5){
+            fprintf(stdout, "So long, partner\n");
             break;
         }
     }
-    sqlite3_close(db);
+
+    sqlite3_finalize(pass_stmt);
+    sqlite3_close(pass_data);
 }
