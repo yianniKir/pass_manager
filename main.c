@@ -1,20 +1,29 @@
 #include <stdio.h>
 #include <sqlite3.h>
 #include <unistd.h>
-#include <stdlib.h>
+#include <signal.h>
 #include <string.h>
 #include <pwd.h>
+
 #define MAX_STR_LEN 30
 
+void sigintHandler(int sig_num)
+{
+    signal(SIGINT, sigintHandler);
+    fprintf(stdout, "\n");
+    fflush(stdout);
+}
+
 int main(int argc, char* argv[]){
+    signal(SIGINT, sigintHandler);
     char* ops = "vi";
     char op = getopt(argc, argv, ops);
     if(op == 'v'){
-        fprintf(stdout, "Version 0.1.0\n");
+        fprintf(stdout, "Version 1.0.0\n");
         return 0;
     }
     if(op == 'i'){
-        fprintf(stdout, "Developed by Yianni Kiritsis for CS50 final project\nFor information on how to use this manager, go to INSERT GITHUB LINK HERE\n");
+        fprintf(stdout, "Developed by Yianni Kiritsis for CS50 final project\nFor information on how to use this manager, go to https://github.com/yianniKir/pass_manager\n");
         return 0;
     }
     if(op == '?'){
@@ -64,12 +73,12 @@ int main(int argc, char* argv[]){
     int choice;
     while(1){
         do{
-            fprintf(stdout, "================MENU================\n1) Create new password\n2) Find all sites and apps connected to an email\n3) Find a password for a site or app\n4) Change program password\n5)Exit\n====================================\n");
+            fprintf(stdout, "================MENU================\n1) Create new password\n2) Find all sites and apps connected to an email\n3) Find a password for a site or app\n4) Change program password\n5) List everything\n0) Exit\n====================================\n");
             fscanf(stdin, "%i", &choice);
-            if(choice < 1 || choice > 5){
+            if(choice < 0 || choice > 6){
                 fprintf(stdout, "Invalid selection\n");
             }
-        }while(choice < 1 || choice > 5);
+        }while(choice < 0 || choice > 6);
         
         if(choice == 1){
             char username[MAX_STR_LEN];
@@ -140,11 +149,11 @@ int main(int argc, char* argv[]){
             }   
             fprintf(stdout, "\n");
         }
+
         if(choice == 4){
             char newpass[MAX_STR_LEN];
             fprintf(stdout, "Provide new password\n");
             fscanf(stdin, "%30s", newpass);
-
             if(sqlite3_exec(pass_data, "DELETE FROM password;", NULL, NULL, &pass_err)){
                 fprintf(stderr, "ERROR: %s\n", pass_err);
                 return 1;
@@ -159,12 +168,31 @@ int main(int argc, char* argv[]){
                 fprintf(stdout, "Your new password is: %s\n", newpass);
             }
         }
+
         if(choice == 5){
-            fprintf(stdout, "So long, partner\n");
+            char* query = sqlite3_mprintf("SELECT * FROM passwords ORDER BY username ASC;");
+
+            if(sqlite3_prepare_v2(pass_data, query, 128,  &pass_stmt, &pass_tail) != SQLITE_OK){
+                fprintf(stderr, "ERROR: %s\n", pass_err);
+                return 1;
+            }
+
+            while((sqlite3_step(pass_stmt)) == SQLITE_ROW){
+                fprintf(stdout, "\nUsername: %s", sqlite3_column_text(pass_stmt, 0));
+                fprintf(stdout, "\nPassword: %s", sqlite3_column_text(pass_stmt, 1));
+                fprintf(stdout, "\nEmail: %s", sqlite3_column_text(pass_stmt, 2));
+                fprintf(stdout, "\nWebsite: %s", sqlite3_column_text(pass_stmt, 3));
+                fprintf(stdout, "\n"); 
+            }   
+            fprintf(stdout, "\n");
+        }
+
+        if(choice == 0){
             break;
         }
     }
 
     sqlite3_finalize(pass_stmt);
     sqlite3_close(pass_data);
+    fprintf(stdout, "Application closed succesfully\n");
 }
