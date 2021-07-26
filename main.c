@@ -71,7 +71,6 @@ int main(int argc, char* argv[]){
     while (SQLITE_ROW == sqlite3_step(pass_stmt)) {
         rowcount ++; 
     }
-    printf("%i\n", rowcount);
     char password[30];
     char* query;
     switch(rowcount){
