@@ -11,6 +11,7 @@ Ive learned so much and will keep learning to make even bigger programs.
 #include <unistd.h>
 #include <signal.h>
 #include <string.h>
+#include <stdlib.h>
 #include <pwd.h>
 
 #define MAX_STR_LEN 30
@@ -61,11 +62,48 @@ int main(int argc, char* argv[]){
     struct passwd *id = getpwuid(uid);
     char usrpass[MAX_STR_LEN];
     //Select the password from the .db file so you can get in
-    char* first_query = sqlite3_mprintf("SELECT pass FROM password LIMIT 1;");
+    char* first_query = sqlite3_mprintf("SELECT pass FROM password;");
     if(sqlite3_prepare_v2(pass_data, first_query, 128,  &pass_stmt, &pass_tail) != SQLITE_OK){
         fprintf(stderr, "ERROR: %s\n", pass_err);
         return 1;
     }
+    int rowcount = 0;
+    while (SQLITE_ROW == sqlite3_step(pass_stmt)) {
+        rowcount ++; 
+    }
+    printf("%i\n", rowcount);
+    char password[30];
+    char* query;
+    switch(rowcount){
+        case 0:                
+            fprintf(stdout, "I see this is your first time running this password, enter a default password\n");
+            fscanf(stdin, "%30s", password);
+                
+            query = sqlite3_mprintf("INSERT INTO password(pass) VALUES('%s');", password);
+
+            if(sqlite3_exec(pass_data, query, NULL, NULL, &pass_err)){
+                fprintf(stderr, "ERROR: %s\n", pass_err);
+                return 1;
+            }
+            fprintf(stdout, "Great! You have completed the setup, your password is %s, don't forget it!\n", password);
+            break;
+        case 1:
+            break;
+        default:
+            fprintf(stdout, "Something is wrong with your program password. We will have to reset, enter a new password\n");
+            fscanf(stdin, "%30s", password);
+
+            query = sqlite3_mprintf("INSERT INTO password(pass) VALUES('%s');", password);
+            if(sqlite3_exec(pass_data, "DELETE FROM password;", NULL, NULL, &pass_err)){
+                fprintf(stderr, "ERROR: %s\n", pass_err);
+                return 1;
+            }
+            if(sqlite3_exec(pass_data, query, NULL, NULL, &pass_err)){
+                fprintf(stderr, "ERROR: %s\n", pass_err);
+                return 1;
+            }
+            fprintf(stdout, "Great! You have completed the setup, your password is %s, don't forget it!\n", password);
+        }
     //Copy the password in the .db file to a string
     while((sqlite3_step(pass_stmt)) == SQLITE_ROW)
         strcpy(usrpass, sqlite3_column_text (pass_stmt, 0));
