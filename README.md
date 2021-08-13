@@ -1,5 +1,5 @@
 # Password Manager
-#### Video Demo:  <URL HERE>
+#### Video Demo:  <https://www.youtube.com/watch?v=RWCQC9qRxt4>
 #### Description:
 This is a password manager written in C that is quite secure due to the fact that you must enter a password to access the SQL database. It is about 270 lines and is fully commented out so others can understand everything about it. The inspiration from this video came from one of my favorite youtubers whenever he made a similar application in Python without a verification system. This inspired me to try to make my own in C to make it faster, and because I enjoy C a lot. The video does not show the feature, but the program is fully functional after compiling the main.c file with the sqlite3.h database. It also offers a first time password creation feature if it is your first time running it. This feature was very interesting to add because it gave me a sense of how other programs do things for the first time and then never again.
   
